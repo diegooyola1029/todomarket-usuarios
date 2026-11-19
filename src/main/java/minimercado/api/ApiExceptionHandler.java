@@ -4,6 +4,11 @@ import java.time.LocalDateTime;
 import java.util.Locale;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -33,7 +38,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ResourceAccessException.class)
     public ResponseEntity<ApiError> manejarInventarioNoDisponible(ResourceAccessException excepcion) {
-        String mensaje = "El microservicio de inventario no está disponible. Inicia inventory-service en el puerto 8183.";
+        String mensaje = "El microservicio de inventario no está disponible.";
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ApiError(mensaje, LocalDateTime.now()));
     }
@@ -46,5 +51,29 @@ public class ApiExceptionHandler {
             // Se conserva un mensaje genérico si el servicio no devolvió el formato de error esperado.
         }
         return "El microservicio rechazó la solicitud (HTTP " + excepcion.getStatusCode().value() + ").";
+    }
+    @ExceptionHandler(DuplicateKeyException.class)
+    public ResponseEntity<ApiError> manejarDuplicado(DuplicateKeyException excepcion) {
+        String detalle = excepcion.getMessage();
+        String mensaje = "Ya existe un usuario con estos datos.";
+        if (detalle != null) {
+            if (detalle.contains("index: nombreNormalizado ")) mensaje = "Ya existe ese nombre de usuario.";
+            if (detalle.contains("index: documento ")) mensaje = "El documento ya está registrado.";
+            if (detalle.contains("index: telefono ")) mensaje = "El teléfono ya está registrado.";
+            if (detalle.contains("index: correoNormalizado ")) mensaje = "El correo ya está registrado.";
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiError(mensaje, LocalDateTime.now()));
+    }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ApiError> manejarFormatoInvalido(Exception excepcion) {
+        String mensaje = "El identificador o el cuerpo de la solicitud tiene un formato inválido.";
+        return ResponseEntity.badRequest().body(new ApiError(mensaje, LocalDateTime.now()));
+    }
+
+    @ExceptionHandler({DataAccessResourceFailureException.class, QueryTimeoutException.class})
+    public ResponseEntity<ApiError> manejarBaseNoDisponible(Exception excepcion) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiError("MongoDB no está disponible.", LocalDateTime.now()));
     }
 }
