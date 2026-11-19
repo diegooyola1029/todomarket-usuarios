@@ -1,8 +1,10 @@
 package minimercado.api.producto;
 
+import java.time.Duration;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -11,8 +13,14 @@ public class InventarioClient {
     private final RestClient cliente;
 
     public InventarioClient(RestClient.Builder builder,
-                            @Value("${todomarket.inventory.url:http://localhost:8183}") String url) {
-        this.cliente = builder.clone().baseUrl(url).build();
+                            @Value("${todomarket.inventory.url:http://localhost:8183}") String url,
+                            @Value("${INVENTORY_TOKEN:}") String token) {
+        var fabrica = new SimpleClientHttpRequestFactory();
+        fabrica.setConnectTimeout(Duration.ofSeconds(3));
+        fabrica.setReadTimeout(Duration.ofSeconds(7));
+        RestClient.Builder configurado = builder.clone().baseUrl(url).requestFactory(fabrica);
+        if (!token.isEmpty()) configurado.defaultHeader("X-TodoMarket-Token", token);
+        this.cliente = configurado.build();
     }
 
     public List<ProductoResponse> listar() {

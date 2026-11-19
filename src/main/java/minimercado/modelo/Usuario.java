@@ -1,9 +1,11 @@
 package minimercado.modelo;
 
 import java.time.LocalDate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /** Cuenta y datos básicos de una persona que utiliza el sistema. */
 public class Usuario {
+    private static final BCryptPasswordEncoder VERIFICADOR = new BCryptPasswordEncoder();
     private final int idPersona;
     private String nombreUsuario;
     private String contrasena;
@@ -19,6 +21,11 @@ public class Usuario {
     }
 
     public Usuario(int idPersona, String nombreUsuario, String contrasena, String documento, String telefono, String correo, Rol rol, boolean estado) {
+        this(idPersona, nombreUsuario, contrasena, documento, telefono, correo, rol, estado, LocalDate.now());
+    }
+
+    public Usuario(int idPersona, String nombreUsuario, String contrasena, String documento,
+                   String telefono, String correo, Rol rol, boolean estado, LocalDate fechaCreacion) {
         if (idPersona <= 0) throw new IllegalArgumentException("El ID del usuario debe ser mayor que cero.");
         validar(nombreUsuario, documento, correo, rol);
         this.idPersona = idPersona;
@@ -27,7 +34,7 @@ public class Usuario {
         this.documento = documento.trim();
         this.telefono = telefono == null ? "" : telefono.trim();
         this.correo = correo == null ? "" : correo.trim();
-        this.fechaCreacion = LocalDate.now();
+        this.fechaCreacion = fechaCreacion;
         this.rol = rol;
         this.estado = estado;
     }
@@ -45,7 +52,10 @@ public class Usuario {
         this.correo = correo == null ? "" : correo.trim();
     }
 
-    public boolean iniciarSesion(String usuario, String clave) { return estado && nombreUsuario.equals(usuario) && contrasena.equals(clave); }
+    public boolean iniciarSesion(String usuario, String clave) {
+        return estado && nombreUsuario.equals(usuario) && clave != null && !contrasena.isBlank()
+                && VERIFICADOR.matches(clave, contrasena);
+    }
     public void cerrarSesion() { }
     public void cambiarContrasena(String nueva) { if (nueva != null && !nueva.isBlank()) contrasena = nueva; }
     public void setNombreUsuario(String v) { if (v == null || v.isBlank()) throw new IllegalArgumentException("El nombre de usuario es obligatorio."); nombreUsuario = v.trim(); }

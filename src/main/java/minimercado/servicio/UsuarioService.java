@@ -1,63 +1,52 @@
 package minimercado.servicio;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import minimercado.modelo.Rol;
 import minimercado.modelo.Usuario;
 import minimercado.repositorio.UsuarioRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
-/** Reglas de negocio del CRUD de usuarios. Depende de una abstracción (DIP). */
 public class UsuarioService {
     private final UsuarioRepository repository;
-    private final AtomicInteger secuenciaIds = new AtomicInteger();
+    private final PasswordEncoder contrasenas;
 
-    public UsuarioService(UsuarioRepository repository){ this.repository = repository; }
+    public UsuarioService(UsuarioRepository repository, PasswordEncoder contrasenas) {
+        this.repository = repository;
+        this.contrasenas = contrasenas;
+    }
 
-    public synchronized Usuario crear(Usuario usuario){
-        if (repository.buscarPorNombreUsuario(usuario.getNombreUsuario()).isPresent()) throw new IllegalArgumentException("Ya existe ese nombre de usuario.");
-        validarDatosUnicos(usuario, -1);
-        int id = secuenciaIds.updateAndGet(actual ->
-                Math.max(actual, repository.listar().stream().mapToInt(Usuario::getIdPersona).max().orElse(0)) + 1);
-        Usuario creado = new Usuario(id, usuario.getNombreUsuario(), usuario.getContrasena(),
+    public Usuario crear(Usuario usuario) {
+        String hash = protegerContrasena(usuario.getContrasena());
+        Usuario creado = new Usuario(repository.siguienteId(), usuario.getNombreUsuario(), hash,
                 usuario.getDocumento(), usuario.getTelefono(), usuario.getCorreo(), usuario.getRol(),
                 usuario.isEstado());
         repository.guardar(creado);
         return creado;
     }
 
-    public List<Usuario> listar(){ return repository.listar(); }
-    public Usuario buscar(int id){ return repository.buscarPorId(id).orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado.")); }
+    public List<Usuario> listar() { return repository.listar(); }
 
-    public void actualizar(Usuario datos){
-        Usuario actual = buscar(datos.getIdPersona());
-        repository.buscarPorNombreUsuario(datos.getNombreUsuario()).ifPresent(encontrado -> {
-            if (encontrado.getIdPersona() != actual.getIdPersona()) throw new IllegalArgumentException("Ya existe ese nombre de usuario.");
-        });
-        validarDatosUnicos(datos, actual.getIdPersona());
-        actual.setNombreUsuario(datos.getNombreUsuario());
-        actual.setDocumento(datos.getDocumento());
-        actual.actualizarDatos(datos.getTelefono(), datos.getCorreo());
-        actual.setRol(datos.getRol());
-        actual.setEstado(datos.isEstado());
-        if (datos.getContrasena() != null && !datos.getContrasena().isBlank()) actual.cambiarContrasena(datos.getContrasena());
-        repository.actualizar(actual);
+    public Usuario buscar(int id) {
+        return repository.buscarPorId(id)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado."));
     }
 
-    public void eliminar(int id){ if(!repository.eliminar(id)) throw new IllegalArgumentException("Usuario no encontrado."); }
-    public Rol crearRol(int id, String nombre, String descripcion){ return new Rol(id, nombre, descripcion); }
+    public Usuario actualizar(Usuario datos) {
+        Usuario cambios = new Usuario(datos.getIdPersona(), datos.getNombreUsuario(),
+                protegerContrasena(datos.getContrasena()), datos.getDocumento(), datos.getTelefono(),
+                datos.getCorreo(), datos.getRol(), datos.isEstado());
+        return repository.actualizar(cambios);
+    }
 
-    private void validarDatosUnicos(Usuario usuario, int excluirId) {
-        for (Usuario existente : repository.listar()) {
-            if (existente.getIdPersona() == excluirId) continue;
-            if (!usuario.getDocumento().isBlank() && existente.getDocumento().equals(usuario.getDocumento())) {
-                throw new IllegalArgumentException("El documento ya está registrado.");
-            }
-            if (!usuario.getTelefono().isBlank() && existente.getTelefono().equals(usuario.getTelefono())) {
-                throw new IllegalArgumentException("El teléfono ya está registrado.");
-            }
-            if (!usuario.getCorreo().isBlank() && existente.getCorreo().equalsIgnoreCase(usuario.getCorreo())) {
-                throw new IllegalArgumentException("El correo ya está registrado.");
-            }
+    public void eliminar(int id) {
+        if (!repository.eliminar(id)) throw new IllegalArgumentException("Usuario no encontrado.");
+    }
+
+    private String protegerContrasena(String clave) {
+        if (clave.isBlank()) return "";
+        if (clave.length() < 4 || clave.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new IllegalArgumentException("La contraseña debe tener al menos 4 caracteres y hasta 72 bytes UTF-8.");
         }
+        return contrasenas.encode(clave);
     }
 }
